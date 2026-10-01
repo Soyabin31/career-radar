@@ -10,6 +10,7 @@ import com.careerradar.source.JobSourceEntity;
 import com.careerradar.source.JobSourceRegistry;
 import com.careerradar.source.JobSourceRepository;
 import com.careerradar.source.RawJob;
+import com.careerradar.eligibility.LocationNormalizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,17 +23,20 @@ public class JobIngestionService {
     private final JobSourceRegistry jobSourceRegistry;
     private final JobRepository jobRepository;
     private final CompanyRepository companyRepository;
+    private final LocationNormalizer locationNormalizer;
 
     public JobIngestionService(
             JobSourceRepository jobSourceRepository,
             JobSourceRegistry jobSourceRegistry,
             JobRepository jobRepository,
-            CompanyRepository companyRepository) {
+            CompanyRepository companyRepository,
+            LocationNormalizer locationNormalizer) {
 
         this.jobSourceRepository = jobSourceRepository;
         this.jobSourceRegistry = jobSourceRegistry;
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
+        this.locationNormalizer = locationNormalizer;
     }
 
     @Transactional
@@ -114,30 +118,35 @@ public class JobIngestionService {
                         rawJob.companyName()
                 );
 
+        LocationNormalizer.NormalizedLocation normalizedLocation =
+                locationNormalizer.normalize(
+                        rawJob.location(),
+                        rawJob.country(),
+                        rawJob.city()
+                );
+
         Job job = Job.create(
-                company != null
-                        ? company.getId()
-                        : null,
-
+                company != null ? company.getId() : null,
                 source.getId(),
-
                 rawJob.sourceJobId(),
-
                 rawJob.title(),
-
                 rawJob.description(),
-
                 rawJob.url(),
-
-                rawJob.country(),
-
-                rawJob.city(),
-
+                rawJob.location(),
+                normalizedLocation.country(),
+                normalizedLocation.city(),
                 rawJob.postedAt()
         );
 
-        jobRepository.save(job);
+        job.applyLocation(
+                normalizedLocation.geographyType(),
+                normalizedLocation.foreignRegion(),
+                normalizedLocation.workplaceType(),
+                normalizedLocation.country(),
+                normalizedLocation.city()
+        );
 
+        jobRepository.save(job);
         return true;
     }
 
@@ -166,5 +175,35 @@ public class JobIngestionService {
                                 )
                         )
                 );
+    }
+
+    @Transactional
+    public int normalizeExistingJobs() {
+
+        List<Job> jobs = jobRepository.findAll();
+
+        int updated = 0;
+
+        for (Job job : jobs) {
+
+            LocationNormalizer.NormalizedLocation normalized =
+                    locationNormalizer.normalize(
+                            job.getLocation(),
+                            job.getCountry(),
+                            job.getCity()
+                    );
+
+            job.applyLocation(
+                    normalized.geographyType(),
+                    normalized.foreignRegion(),
+                    normalized.workplaceType(),
+                    normalized.country(),
+                    normalized.city()
+            );
+
+            updated++;
+        }
+
+        return updated;
     }
 }

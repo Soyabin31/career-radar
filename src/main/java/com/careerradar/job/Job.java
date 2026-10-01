@@ -105,6 +105,9 @@ public class Job {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    @Column(name = "location")
+    private String location;
+
     protected Job() {
     }
 
@@ -115,6 +118,7 @@ public class Job {
             String title,
             String description,
             String canonicalUrl,
+            String location,
             String country,
             String city,
             OffsetDateTime postedAt) {
@@ -242,5 +246,28 @@ public class Job {
 
     public OffsetDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public void applyLocation(
+            GeographyType geographyType,
+            ForeignRegion foreignRegion,
+            WorkplaceType workplaceType,
+            String country,
+            String city) {
+
+        this.geographyType = geographyType;
+        this.foreignRegion = foreignRegion;
+        this.workplaceType = workplaceType;
+        this.country = country;
+        this.city = city;
+        this.updatedAt = OffsetDateTime.now();
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public void setLocation(String location) {
+        this.location = location;
     }
 }

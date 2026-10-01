@@ -1,6 +1,7 @@
 package com.careerradar.ingestion;
 
 import com.careerradar.company.CompanyRepository;
+import com.careerradar.eligibility.LocationNormalizer;
 import com.careerradar.job.JobRepository;
 import com.careerradar.source.JobSourceEntity;
 import com.careerradar.source.JobSourceRegistry;
@@ -20,6 +21,9 @@ class JobIngestionServiceTest {
         JobSourceRegistry jobSourceRegistry =
                 mock(JobSourceRegistry.class);
 
+        LocationNormalizer locationNormalizer =
+                mock(LocationNormalizer.class);
+
         JobRepository jobRepository =
                 mock(JobRepository.class);
 
@@ -31,7 +35,8 @@ class JobIngestionServiceTest {
                         jobSourceRepository,
                         jobSourceRegistry,
                         jobRepository,
-                        companyRepository
+                        companyRepository,
+                        locationNormalizer
                 );
 
         org.junit.jupiter.api.Assertions.assertNotNull(service);
