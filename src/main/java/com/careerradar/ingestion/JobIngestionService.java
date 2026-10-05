@@ -3,14 +3,16 @@ package com.careerradar.ingestion;
 import com.careerradar.company.Company;
 import com.careerradar.company.CompanyRepository;
 import com.careerradar.company.CompanyType;
+import com.careerradar.eligibility.LocationNormalizer;
 import com.careerradar.job.Job;
 import com.careerradar.job.JobRepository;
+import com.careerradar.matching.JobSkillExtractionService;
+import com.careerradar.matching.RoleClassificationService;
 import com.careerradar.source.JobSource;
 import com.careerradar.source.JobSourceEntity;
 import com.careerradar.source.JobSourceRegistry;
 import com.careerradar.source.JobSourceRepository;
 import com.careerradar.source.RawJob;
-import com.careerradar.eligibility.LocationNormalizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,19 +26,25 @@ public class JobIngestionService {
     private final JobRepository jobRepository;
     private final CompanyRepository companyRepository;
     private final LocationNormalizer locationNormalizer;
+    private final RoleClassificationService roleClassificationService;
+    private final JobSkillExtractionService jobSkillExtractionService;
 
     public JobIngestionService(
             JobSourceRepository jobSourceRepository,
             JobSourceRegistry jobSourceRegistry,
             JobRepository jobRepository,
             CompanyRepository companyRepository,
-            LocationNormalizer locationNormalizer) {
+            LocationNormalizer locationNormalizer,
+            RoleClassificationService roleClassificationService,
+            JobSkillExtractionService jobSkillExtractionService) {
 
         this.jobSourceRepository = jobSourceRepository;
         this.jobSourceRegistry = jobSourceRegistry;
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.locationNormalizer = locationNormalizer;
+        this.roleClassificationService = roleClassificationService;
+        this.jobSkillExtractionService = jobSkillExtractionService;
     }
 
     @Transactional
@@ -146,8 +154,33 @@ public class JobIngestionService {
                 normalizedLocation.city()
         );
 
-        jobRepository.save(job);
+        Job savedJob =
+                jobRepository.save(job);
+
+        /*
+         * Newly inserted jobs enter the matching pipeline.
+         */
+        enrichJob(savedJob);
+
         return true;
+    }
+
+    /**
+     * Enriches an existing job with the same matching information
+     * that is applied to newly ingested jobs.
+     *
+     * This is intentionally kept in one method so that the new-job
+     * and existing-job paths do not develop different enrichment logic.
+     */
+    private void enrichJob(Job job) {
+
+        roleClassificationService.classifyAndPersist(
+                job
+        );
+
+        jobSkillExtractionService.extractAndPersist(
+                job
+        );
     }
 
     private Company resolveCompany(
@@ -177,10 +210,55 @@ public class JobIngestionService {
                 );
     }
 
+    /**
+     * Backfills location, role classification and extracted skills
+     * for jobs that were already stored before the enrichment pipeline
+     * was introduced.
+     */
+    @Transactional
+    public int enrichExistingJobs() {
+
+        List<Job> jobs =
+                jobRepository.findAll();
+
+        int updated = 0;
+
+        for (Job job : jobs) {
+
+            LocationNormalizer.NormalizedLocation normalized =
+                    locationNormalizer.normalize(
+                            job.getLocation(),
+                            job.getCountry(),
+                            job.getCity()
+                    );
+
+            job.applyLocation(
+                    normalized.geographyType(),
+                    normalized.foreignRegion(),
+                    normalized.workplaceType(),
+                    normalized.country(),
+                    normalized.city()
+            );
+
+            enrichJob(job);
+
+            updated++;
+        }
+
+        return updated;
+    }
+
+    /**
+     * Kept for compatibility with the earlier location-only
+     * backfill operation.
+     *
+     * New code should use enrichExistingJobs().
+     */
     @Transactional
     public int normalizeExistingJobs() {
 
-        List<Job> jobs = jobRepository.findAll();
+        List<Job> jobs =
+                jobRepository.findAll();
 
         int updated = 0;
 

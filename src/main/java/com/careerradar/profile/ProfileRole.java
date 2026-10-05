@@ -1,6 +1,6 @@
 package com.careerradar.profile;
 
-import com.careerradar.matching.RoleFamily;
+import com.careerradar.job.domain.RoleFamily;
 import jakarta.persistence.*;
 
 import java.time.OffsetDateTime;

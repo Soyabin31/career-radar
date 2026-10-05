@@ -11,7 +11,9 @@ public class IngestionController {
 
     private final JobIngestionService jobIngestionService;
 
-    public IngestionController(JobIngestionService jobIngestionService) {
+    public IngestionController(
+            JobIngestionService jobIngestionService) {
+
         this.jobIngestionService = jobIngestionService;
     }
 
@@ -24,6 +26,20 @@ public class IngestionController {
         return new ScanResponse(inserted);
     }
 
-    public record ScanResponse(int inserted) {
+    @PostMapping("/enrich-existing")
+    public EnrichmentResponse enrichExisting() {
+
+        int updated =
+                jobIngestionService.enrichExistingJobs();
+
+        return new EnrichmentResponse(updated);
     }
+
+    public record ScanResponse(
+            int inserted
+    ) {}
+
+    public record EnrichmentResponse(
+            int updated
+    ) {}
 }
