@@ -758,12 +758,15 @@ CONTAINER ID   IMAGE                  STATUS                   PORTS
 ...            postgres:17-bookworm   Up (healthy)             0.0.0.0:5433->5432/tcp
 ```
 
-> **Database Credentials**:
-> * **Host**: `localhost`
+> [!NOTE]
+> **Local Sandbox Credentials**:
+> * **Host**: `localhost` (127.0.0.1 — private loopback only; completely isolated from the internet)
 > * **Port**: `5433`
 > * **Database**: `career_radar`
 > * **Username**: `career_radar`
 > * **Password**: `career_radar`
+> 
+> *Security Note*: These credentials are for local Docker development only. No external person on the internet can connect to `localhost` on your machine. When other developers clone the repository, Docker creates a separate, empty database on their own machine without access to yours. To use custom credentials, define `POSTGRES_USER` and `POSTGRES_PASSWORD` in a local `.env` file (which is git-ignored).
 
 ---
 
