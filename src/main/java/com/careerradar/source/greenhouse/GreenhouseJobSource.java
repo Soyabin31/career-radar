@@ -20,7 +20,9 @@ public class GreenhouseJobSource implements JobSource {
     private final RestClient restClient;
 
     public GreenhouseJobSource(RestClient.Builder restClientBuilder) {
-        this.restClient = restClientBuilder.build();
+        this.restClient = restClientBuilder
+                .defaultHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 CareerRadar/2.0")
+                .build();
     }
 
     @Override

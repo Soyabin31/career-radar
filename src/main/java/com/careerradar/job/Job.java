@@ -7,7 +7,11 @@ import com.careerradar.job.domain.WorkplaceType;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(
@@ -66,13 +70,13 @@ public class Job {
     @Column(name = "employment_type")
     private EmploymentType employmentType;
 
-    @Column(length = 100)
+    @Column(length = 255)
     private String country;
 
-    @Column(name = "state_or_region", length = 100)
+    @Column(name = "state_or_region", length = 255)
     private String stateOrRegion;
 
-    @Column(length = 150)
+    @Column(length = 255)
     private String city;
 
     @Column(name = "salary_min", precision = 15, scale = 2)
@@ -133,8 +137,9 @@ public class Job {
         job.title = title;
         job.description = description;
         job.canonicalUrl = canonicalUrl;
-        job.country = country;
-        job.city = city;
+        job.location = location;
+        job.country = truncate(country, 255);
+        job.city = truncate(city, 255);
         job.postedAt = postedAt;
 
         job.discoveredAt = now;
@@ -142,8 +147,50 @@ public class Job {
         job.createdAt = now;
         job.updatedAt = now;
         job.active = true;
+        job.contentHash = computeContentHash(title, description, location);
 
         return job;
+    }
+
+    public static String computeContentHash(String title, String description, String location) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String payload = (title != null ? title.trim() : "") + "||" +
+                    (description != null ? description.trim() : "") + "||" +
+                    (location != null ? location.trim() : "");
+            byte[] hash = digest.digest(payload.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm not available", e);
+        }
+    }
+
+    public boolean updateContentIfChanged(String title, String description, String location) {
+        String newHash = computeContentHash(title, description, location);
+        if (!Objects.equals(this.contentHash, newHash)) {
+            this.title = title;
+            this.description = description;
+            this.location = location;
+            this.contentHash = newHash;
+            this.active = true;
+            this.lastSeenAt = OffsetDateTime.now();
+            this.updatedAt = OffsetDateTime.now();
+            return true;
+        }
+        return false;
+    }
+
+    public void markClosed() {
+        this.active = false;
+        this.updatedAt = OffsetDateTime.now();
     }
 
     public void markSeen() {
@@ -258,9 +305,17 @@ public class Job {
         this.geographyType = geographyType;
         this.foreignRegion = foreignRegion;
         this.workplaceType = workplaceType;
-        this.country = country;
-        this.city = city;
+        this.country = truncate(country, 255);
+        this.city = truncate(city, 255);
         this.updatedAt = OffsetDateTime.now();
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.length() > maxLength ? trimmed.substring(0, maxLength) : trimmed;
     }
 
     public String getLocation() {
@@ -269,5 +324,11 @@ public class Job {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public void applyEmploymentType(
+            EmploymentType employmentType) {
+
+        this.employmentType = employmentType;
     }
 }

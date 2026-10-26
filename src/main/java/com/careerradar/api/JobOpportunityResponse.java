@@ -4,6 +4,8 @@ import com.careerradar.eligibility.EligibilityResult;
 import com.careerradar.matching.JobMatchResult;
 import com.careerradar.opportunity.JobOpportunityResult;
 
+import java.time.OffsetDateTime;
+
 public record JobOpportunityResponse(
         Long jobId,
         String title,
@@ -18,6 +20,8 @@ public record JobOpportunityResponse(
         String workplaceType,
         String employmentType,
         String roleFamily,
+        OffsetDateTime postedAt,
+        OffsetDateTime discoveredAt,
         MatchResponse match,
         EligibilityResponse eligibility
 ) {
@@ -39,6 +43,8 @@ public record JobOpportunityResponse(
                 result.workplaceType(),
                 result.employmentType(),
                 result.roleFamily(),
+                result.postedAt(),
+                result.discoveredAt(),
                 MatchResponse.from(result.match()),
                 EligibilityResponse.from(result.eligibility())
         );

@@ -46,7 +46,11 @@ public class LocationNormalizer {
                 value,
                 "remote",
                 "work from home",
-                "distributed"
+                "wfh",
+                "distributed",
+                "anywhere",
+                "worldwide",
+                "virtual"
         )) {
             return WorkplaceType.REMOTE;
         }
@@ -77,9 +81,23 @@ public class LocationNormalizer {
                 "bengaluru",
                 "bangalore",
                 "pune",
+                "hyderabad",
+                "delhi",
+                "noida",
+                "gurgaon",
+                "gurugram",
+                "mumbai",
+                "chennai",
                 "kolkata",
                 "bhubaneswar",
-                "odisha"
+                "odisha",
+                "ahmedabad",
+                "chandigarh",
+                "indore",
+                "jaipur",
+                "kochi",
+                "trivandrum",
+                "mysore"
         )) {
             return GeographyType.INDIA;
         }

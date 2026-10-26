@@ -20,6 +20,9 @@ import java.util.Set;
 @Service
 public class JobMatchingService {
 
+    private static final double ROLE_WEIGHT = 0.60;
+    private static final double TECHNOLOGY_WEIGHT = 0.40;
+
     private final JobRepository jobRepository;
     private final JobRoleClassificationRepository
             roleClassificationRepository;
@@ -81,11 +84,17 @@ public class JobMatchingService {
                         : classifications.get(0)
                         .getRoleFamily();
 
+        /*
+         * UNKNOWN is never a role match.
+         *
+         * Technology overlap alone must not create a role match.
+         */
         boolean roleMatch =
-                isRoleMatch(
-                        jobRoleFamily,
-                        profileRoles
-                );
+                jobRoleFamily != RoleFamily.UNKNOWN &&
+                        isRoleMatch(
+                                jobRoleFamily,
+                                profileRoles
+                        );
 
         Set<String> profileSkillNames =
                 new HashSet<>();
@@ -133,24 +142,26 @@ public class JobMatchingService {
         for (JobSkill jobSkill :
                 jobSkills) {
 
-            if (!Boolean.TRUE.equals(
-                    jobSkill.getRequired())) {
-                continue;
-            }
-
             String skillName =
                     jobSkill.getSkill()
                             .getNormalizedName();
 
             double confidence =
-                    jobSkill.getConfidence()
-                            .doubleValue();
+                    jobSkill.getConfidence() != null
+                            ? jobSkill.getConfidence().doubleValue()
+                            : 0.80;
 
-            double skillWeight =
+            boolean isRequired =
+                    Boolean.TRUE.equals(jobSkill.getRequired());
+
+            double baseWeight =
                     determineSkillWeight(
                             skillName,
                             profileSkills
                     );
+
+            double skillWeight =
+                    isRequired ? baseWeight * 1.5 : baseWeight;
 
             totalWeight +=
                     skillWeight * confidence;
@@ -161,33 +172,22 @@ public class JobMatchingService {
                 matchedWeight +=
                         skillWeight * confidence;
 
-                matchedSkills.add(
-                        jobSkill.getSkill().getName()
-                );
+                if (!matchedSkills.contains(jobSkill.getSkill().getName())) {
+                    matchedSkills.add(
+                            jobSkill.getSkill().getName()
+                    );
+                }
 
             } else {
 
-                missingSkills.add(
-                        jobSkill.getSkill().getName()
-                );
-            }
-        }
-
-        for (JobSkill jobSkill :
-                jobSkills) {
-
-            if (Boolean.TRUE.equals(
-                    jobSkill.getRequired())) {
-                continue;
+                if (!missingSkills.contains(jobSkill.getSkill().getName())) {
+                    missingSkills.add(
+                            jobSkill.getSkill().getName()
+                    );
+                }
             }
 
-            String skillName =
-                    jobSkill.getSkill()
-                            .getNormalizedName();
-
-            if (secondarySkillNames.contains(
-                    skillName)) {
-
+            if (secondarySkillNames.contains(skillName) && !supportingSkills.contains(jobSkill.getSkill().getName())) {
                 supportingSkills.add(
                         jobSkill.getSkill().getName()
                 );
@@ -203,15 +203,14 @@ public class JobMatchingService {
                 roleMatch ? 1.0 : 0.0;
 
         /*
-         * Role fit deliberately has the larger weight.
+         * Role identity is intentionally dominant.
          *
-         * This prevents a Python/Data/DevOps job with
-         * overlapping infrastructure skills from becoming
-         * a strong Java match.
+         * A job cannot become a strong Java match merely because
+         * it contains overlapping infrastructure technologies.
          */
         double finalScore =
-                (roleFit * 0.60)
-                        + (technologyFit * 0.40);
+                (roleFit * ROLE_WEIGHT)
+                        + (technologyFit * TECHNOLOGY_WEIGHT);
 
         BigDecimal score =
                 BigDecimal.valueOf(
@@ -246,11 +245,6 @@ public class JobMatchingService {
                 continue;
             }
 
-            /*
-             * Both values are RoleFamily enums.
-             *
-             * Do not compare RoleFamily with String.
-             */
             if (profileRole.getRoleFamily()
                     == jobRoleFamily) {
 
@@ -283,8 +277,7 @@ public class JobMatchingService {
         }
 
         /*
-         * Unknown job skills still contribute to the
-         * denominator, but with a neutral weight.
+         * Unknown skills remain neutral rather than being ignored.
          */
         return 1.0;
     }

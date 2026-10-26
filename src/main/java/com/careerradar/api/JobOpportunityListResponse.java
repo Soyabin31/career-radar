@@ -3,6 +3,7 @@ package com.careerradar.api;
 import com.careerradar.opportunity.JobOpportunityResult;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 public record JobOpportunityListResponse(
@@ -38,7 +39,9 @@ public record JobOpportunityListResponse(
             String eligibilityStatus,
             List<String> matchedSkills,
             List<String> missingSkills,
-            String canonicalUrl
+            String canonicalUrl,
+            OffsetDateTime postedAt,
+            OffsetDateTime discoveredAt
     ) {
 
         public static Item from(JobOpportunityResult result) {
@@ -58,7 +61,9 @@ public record JobOpportunityListResponse(
                     result.eligibility().status().name(),
                     result.match().matchedSkills(),
                     result.match().missingSkills(),
-                    result.canonicalUrl()
+                    result.canonicalUrl(),
+                    result.postedAt(),
+                    result.discoveredAt()
             );
         }
     }

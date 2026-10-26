@@ -36,6 +36,8 @@ public class JobOpportunityService {
         this.eligibilityService = eligibilityService;
     }
 
+    private final java.util.Map<Long, String> companyNameCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Transactional(readOnly = true)
     public JobOpportunityResult getOpportunity(Long jobId) {
 
@@ -45,9 +47,12 @@ public class JobOpportunityService {
                                 "Job not found: " + jobId
                         ));
 
-        String companyName = companyRepository.findById(job.getCompanyId())
-                .map(Company::getName)
-                .orElse(null);
+        String companyName = null;
+        if (job.getCompanyId() != null) {
+            companyName = companyNameCache.computeIfAbsent(job.getCompanyId(), id ->
+                    companyRepository.findById(id).map(Company::getName).orElse(null)
+            );
+        }
 
         String roleFamily = jobRoleClassificationRepository
                 .findByJobIdOrderByConfidenceDesc(jobId)
@@ -85,6 +90,8 @@ public class JobOpportunityService {
                         ? null
                         : job.getEmploymentType().name(),
                 roleFamily,
+                job.getPostedAt(),
+                job.getDiscoveredAt(),
                 match,
                 eligibility
         );

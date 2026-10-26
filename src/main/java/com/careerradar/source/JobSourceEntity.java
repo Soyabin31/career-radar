@@ -37,6 +37,26 @@ public class JobSourceEntity {
     protected JobSourceEntity() {
     }
 
+    public static JobSourceEntity create(
+            Long companyId,
+            SourceType sourceType,
+            String sourceIdentifier,
+            String sourceUrl) {
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        JobSourceEntity entity = new JobSourceEntity();
+        entity.companyId = companyId;
+        entity.sourceType = sourceType;
+        entity.sourceIdentifier = sourceIdentifier;
+        entity.sourceUrl = sourceUrl != null ? sourceUrl : "";
+        entity.active = true;
+        entity.createdAt = now;
+        entity.updatedAt = now;
+
+        return entity;
+    }
+
     public Long getId() {
         return id;
     }

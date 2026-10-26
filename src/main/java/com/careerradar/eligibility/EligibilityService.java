@@ -10,10 +10,10 @@ import com.careerradar.job.domain.WorkplaceType;
 import com.careerradar.profile.Profile;
 import com.careerradar.profile.ProfileConfigurationService;
 import com.careerradar.profile.ProfileEmploymentPreference;
-import com.careerradar.profile.ProfileLocation;
-import com.careerradar.profile.ProfileWorkplacePreference;
-import com.careerradar.profile.ProfileLocationRepository;
 import com.careerradar.profile.ProfileEmploymentPreferenceRepository;
+import com.careerradar.profile.ProfileLocation;
+import com.careerradar.profile.ProfileLocationRepository;
+import com.careerradar.profile.ProfileWorkplacePreference;
 import com.careerradar.profile.ProfileWorkplacePreferenceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +56,15 @@ public class EligibilityService {
                 employmentPreferenceRepository;
     }
 
+    private final java.util.Map<Long, CachedPreferences> preferenceCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record CachedPreferences(
+            List<ProfileLocation> locations,
+            List<ProfileWorkplacePreference> workplacePreferences,
+            List<ProfileEmploymentPreference> employmentPreferences,
+            long cachedAt
+    ) {}
+
     @Transactional(readOnly = true)
     public EligibilityResult evaluateJob(Long jobId) {
 
@@ -74,25 +83,36 @@ public class EligibilityService {
         Long profileId =
                 profile.getId();
 
-        List<ProfileLocation> locations =
-                profileLocationRepository
-                        .findByProfileIdAndActiveTrueOrderByPriorityAsc(
-                                profileId
-                        );
+        long now = System.currentTimeMillis();
+        CachedPreferences cached = preferenceCache.get(profileId);
+        List<ProfileLocation> locations;
+        List<ProfileWorkplacePreference> workplacePreferences;
+        List<ProfileEmploymentPreference> employmentPreferences;
 
-        List<ProfileWorkplacePreference>
-                workplacePreferences =
-                workplacePreferenceRepository
-                        .findByProfileIdAndActiveTrueOrderByPriorityAsc(
-                                profileId
-                        );
+        if (cached != null && (now - cached.cachedAt() < 60_000)) {
+            locations = cached.locations();
+            workplacePreferences = cached.workplacePreferences();
+            employmentPreferences = cached.employmentPreferences();
+        } else {
+            locations =
+                    profileLocationRepository
+                            .findByProfileIdAndActiveTrueOrderByPriorityAsc(
+                                    profileId
+                            );
 
-        List<ProfileEmploymentPreference>
-                employmentPreferences =
-                employmentPreferenceRepository
-                        .findByProfileIdAndActiveTrueOrderByPriorityAsc(
-                                profileId
-                        );
+            workplacePreferences =
+                    workplacePreferenceRepository
+                            .findByProfileIdAndActiveTrueOrderByPriorityAsc(
+                                    profileId
+                            );
+
+            employmentPreferences =
+                    employmentPreferenceRepository
+                            .findByProfileIdAndActiveTrueOrderByPriorityAsc(
+                                    profileId
+                            );
+            preferenceCache.put(profileId, new CachedPreferences(locations, workplacePreferences, employmentPreferences, now));
+        }
 
         boolean geographyMatch =
                 matchesGeography(
@@ -112,18 +132,29 @@ public class EligibilityService {
                         employmentPreferences
                 );
 
+        boolean geographyKnown =
+                isGeographyKnown(job);
+
+        boolean workplaceKnown =
+                isWorkplaceKnown(job);
+
+        boolean employmentKnown =
+                isEmploymentKnown(job);
+
         List<String> reasons =
                 new ArrayList<>();
 
         EligibilityStatus status =
                 determineStatus(
-                        job,
                         locations,
                         workplacePreferences,
                         employmentPreferences,
                         geographyMatch,
                         workplaceMatch,
                         employmentMatch,
+                        geographyKnown,
+                        workplaceKnown,
+                        employmentKnown,
                         reasons
                 );
 
@@ -138,7 +169,6 @@ public class EligibilityService {
     }
 
     private EligibilityStatus determineStatus(
-            Job job,
             List<ProfileLocation> locations,
             List<ProfileWorkplacePreference>
                     workplacePreferences,
@@ -147,106 +177,137 @@ public class EligibilityService {
             boolean geographyMatch,
             boolean workplaceMatch,
             boolean employmentMatch,
+            boolean geographyKnown,
+            boolean workplaceKnown,
+            boolean employmentKnown,
             List<String> reasons) {
 
-        boolean geographyKnown =
-                job.getGeographyType() != null;
-
-        boolean workplaceKnown =
-                job.getWorkplaceType() != null
-                        && job.getWorkplaceType()
-                        != WorkplaceType.UNKNOWN;
-
-        boolean employmentKnown =
-                job.getEmploymentType() != null;
-
         /*
-         * No geographic preferences means we do not
-         * restrict the job by location.
+         * An empty preference list means that dimension
+         * is unrestricted.
          */
         if (locations.isEmpty()) {
             geographyMatch = true;
         }
 
-        /*
-         * No workplace preferences means we do not
-         * restrict the job by workplace type.
-         */
         if (workplacePreferences.isEmpty()) {
             workplaceMatch = true;
         }
 
-        /*
-         * No employment preferences means we do not
-         * restrict the job by employment type.
-         */
         if (employmentPreferences.isEmpty()) {
             employmentMatch = true;
         }
 
-        if (geographyMatch) {
-            reasons.add(
-                    "Job geography matches the profile preferences"
-            );
-        } else if (geographyKnown) {
+        /*
+         * Only explicit, known conflicts make a job
+         * NOT_ELIGIBLE.
+         *
+         * Unknown values are intentionally not treated
+         * as mismatches.
+         */
+        boolean geographyConflict =
+                geographyKnown && !geographyMatch;
+
+        boolean workplaceConflict =
+                workplaceKnown && !workplaceMatch;
+
+        boolean employmentConflict =
+                employmentKnown && !employmentMatch;
+
+        if (geographyConflict) {
             reasons.add(
                     "Job geography does not match the profile preferences"
             );
+        } else if (geographyKnown) {
+            reasons.add(
+                    "Job geography matches the profile preferences"
+            );
+        } else {
+            reasons.add(
+                    "Job geography is unknown"
+            );
         }
 
-        if (workplaceMatch) {
-            reasons.add(
-                    "Job workplace type matches the profile preferences"
-            );
-        } else if (workplaceKnown) {
+        if (workplaceConflict) {
             reasons.add(
                     "Job workplace type does not match the profile preferences"
             );
+        } else if (workplaceKnown) {
+            reasons.add(
+                    "Job workplace type matches the profile preferences"
+            );
+        } else {
+            reasons.add(
+                    "Job workplace type is unknown"
+            );
         }
 
-        if (employmentMatch) {
+        if (employmentConflict) {
             reasons.add(
-                    "Job employment type matches the profile preferences"
+                    "Job employment type does not match the profile preferences"
             );
         } else if (employmentKnown) {
             reasons.add(
-                    "Job employment type does not match the profile preferences"
+                    "Job employment type matches the profile preferences"
+            );
+        } else {
+            reasons.add(
+                    "Job employment type is unknown"
             );
         }
 
         /*
-         * Explicit conflicts take precedence over ambiguity.
+         * Explicit known conflicts always take precedence.
          */
-        if (!geographyMatch
-                || !workplaceMatch
-                || !employmentMatch) {
+        if (geographyConflict
+                || workplaceConflict
+                || employmentConflict) {
 
             return EligibilityStatus.NOT_ELIGIBLE;
         }
 
         /*
-         * If all known dimensions match but one or more
-         * dimensions are unknown, keep the job reviewable.
+         * If any restricted dimension is unknown,
+         * keep the opportunity reviewable.
          */
-        if (!geographyKnown
-                || !workplaceKnown
-                || !employmentKnown) {
+        boolean unknownDimension =
+                (!geographyKnown && !locations.isEmpty())
+                        || (!workplaceKnown
+                        && !workplacePreferences.isEmpty())
+                        || (!employmentKnown
+                        && !employmentPreferences.isEmpty());
 
+        if (unknownDimension) {
             return EligibilityStatus.MAYBE;
         }
 
         /*
-         * No geographic restriction and all known
-         * dimensions are acceptable.
+         * No geographic restriction means the opportunity
+         * is globally acceptable from the profile's point
+         * of view.
          */
-        if (locations.isEmpty()
-                && workplaceMatch
-                && employmentMatch) {
-
+        if (locations.isEmpty()) {
             return EligibilityStatus.GLOBAL;
         }
 
         return EligibilityStatus.REGION_OK;
+    }
+
+    private boolean isGeographyKnown(Job job) {
+
+        return job.getGeographyType() != null;
+    }
+
+    private boolean isWorkplaceKnown(Job job) {
+
+        return job.getWorkplaceType() != null
+                && job.getWorkplaceType()
+                != WorkplaceType.UNKNOWN;
+    }
+
+    private boolean isEmploymentKnown(Job job) {
+
+        return job.getEmploymentType() != null;
     }
 
     private boolean matchesGeography(
@@ -257,11 +318,16 @@ public class EligibilityService {
             return true;
         }
 
-        if (job.getGeographyType() == null) {
-            return false;
+        /*
+         * Unknown geography is not a mismatch.
+         * It will be represented by MAYBE later.
+         */
+        if (!isGeographyKnown(job)) {
+            return true;
         }
 
-        for (ProfileLocation location : locations) {
+        for (ProfileLocation location :
+                locations) {
 
             if (matchesProfileLocation(
                     job,
@@ -416,10 +482,13 @@ public class EligibilityService {
             return true;
         }
 
+        /*
+         * Unknown workplace is not a mismatch.
+         */
         if (jobWorkplace == null
                 || jobWorkplace == WorkplaceType.UNKNOWN) {
 
-            return false;
+            return true;
         }
 
         for (ProfileWorkplacePreference preference :
@@ -449,8 +518,11 @@ public class EligibilityService {
             return true;
         }
 
+        /*
+         * Unknown employment type is not a mismatch.
+         */
         if (jobEmployment == null) {
-            return false;
+            return true;
         }
 
         for (ProfileEmploymentPreference preference :

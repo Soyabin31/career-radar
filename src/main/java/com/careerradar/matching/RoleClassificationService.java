@@ -31,25 +31,19 @@ public class RoleClassificationService {
     @Transactional
     public int classifyAllJobs() {
 
-        List<Job> jobs = jobRepository.findAll();
+        List<Job> jobs =
+                jobRepository.findAll();
 
         int classified = 0;
 
         for (Job job : jobs) {
 
             RoleClassificationResult result =
-                    roleClassifier.classify(
-                            job.getTitle(),
-                            job.getDescription()
-                    );
+                    classifyAndPersist(job);
 
-            if (result.roleFamily() == RoleFamily.UNKNOWN) {
-                continue;
+            if (result.roleFamily() != RoleFamily.UNKNOWN) {
+                classified++;
             }
-
-            upsertClassification(job, result);
-
-            classified++;
         }
 
         return classified;
@@ -63,19 +57,10 @@ public class RoleClassificationService {
                         .orElseThrow(() ->
                                 new IllegalArgumentException(
                                         "Job not found: " + jobId
-                                ));
+                                )
+                        );
 
-        RoleClassificationResult result =
-                roleClassifier.classify(
-                        job.getTitle(),
-                        job.getDescription()
-                );
-
-        if (result.roleFamily() != RoleFamily.UNKNOWN) {
-            upsertClassification(job, result);
-        }
-
-        return result;
+        return classifyAndPersist(job);
     }
 
     @Transactional(readOnly = true)
@@ -86,19 +71,82 @@ public class RoleClassificationService {
                 .findByJobIdOrderByConfidenceDesc(jobId);
     }
 
-    private void upsertClassification(
+    @Transactional
+    public RoleClassificationResult classifyAndPersist(Job job) {
+
+        RoleClassificationResult result =
+                roleClassifier.classify(
+                        job.getTitle(),
+                        job.getDescription()
+                );
+
+        reconcileClassification(
+                job,
+                result
+        );
+
+        return result;
+    }
+
+    private void reconcileClassification(
             Job job,
             RoleClassificationResult result) {
 
+        List<JobRoleClassification> existing =
+                classificationRepository
+                        .findByJobIdOrderByConfidenceDesc(
+                                job.getId()
+                        );
+
+        /*
+         * UNKNOWN means that the job has no positive role
+         * classification.
+         *
+         * Remove stale classifications so that an old
+         * JAVA_BACKEND classification cannot survive after
+         * the classifier now determines UNKNOWN.
+         */
+        if (result.roleFamily() == RoleFamily.UNKNOWN) {
+
+            if (!existing.isEmpty()) {
+                classificationRepository.deleteAll(existing);
+            }
+
+            return;
+        }
+
+        /*
+         * The classifier currently produces one winning role
+         * family. Remove any previous competing classifications.
+         */
+        List<JobRoleClassification> stale =
+                existing.stream()
+                        .filter(existingClassification ->
+                                existingClassification
+                                        .getRoleFamily()
+                                        != result.roleFamily()
+                        )
+                        .toList();
+
+        if (!stale.isEmpty()) {
+            classificationRepository.deleteAll(stale);
+        }
+
+        /*
+         * Update the existing classification when the role family
+         * is unchanged; otherwise create a new classification.
+         */
         classificationRepository
                 .findByJobIdAndRoleFamily(
                         job.getId(),
                         result.roleFamily()
                 )
                 .ifPresentOrElse(
-                        existing ->
-                                existing.update(
-                                        BigDecimal.valueOf(result.confidence()),
+                        existingClassification ->
+                                existingClassification.update(
+                                        BigDecimal.valueOf(
+                                                result.confidence()
+                                        ),
                                         CLASSIFIER_SOURCE
                                 ),
                         () ->
@@ -111,21 +159,5 @@ public class RoleClassificationService {
                                         )
                                 )
                 );
-    }
-
-    @Transactional
-    public RoleClassificationResult classifyAndPersist(Job job) {
-
-        RoleClassificationResult result =
-                roleClassifier.classify(
-                        job.getTitle(),
-                        job.getDescription()
-                );
-
-        if (result.roleFamily() != RoleFamily.UNKNOWN) {
-            upsertClassification(job, result);
-        }
-
-        return result;
     }
 }

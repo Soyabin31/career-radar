@@ -1,0 +1,241 @@
+{
+  "info": {
+    "_postman_id": "c8a1b2c3-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "name": "Career Radar API",
+    "description": "Postman Collection for Career Radar - Job Opportunity Monitoring & Intelligence Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3107",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Opportunities",
+      "item": [
+        {
+          "name": "Get Opportunities (Default Feed)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"]
+            },
+            "description": "Fetches all opportunities scored and ranked against candidate profile."
+          }
+        },
+        {
+          "name": "Get Filtered Opportunities (Java Backend, Min Score 50)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities?roleFamily=JAVA_BACKEND&minScore=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"],
+              "query": [
+                {
+                  "key": "roleFamily",
+                  "value": "JAVA_BACKEND"
+                },
+                {
+                  "key": "minScore",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Filters opportunities to only Java Backend roles above 50% match score."
+          }
+        },
+        {
+          "name": "Get Remote Opportunities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities?workplace=REMOTE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"],
+              "query": [
+                {
+                  "key": "workplace",
+                  "value": "REMOTE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get India Opportunities (Domestic & WFH)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities?geography=INDIA",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"],
+              "query": [
+                {
+                  "key": "geography",
+                  "value": "INDIA"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Global Remote (USD/EUR Contracts)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/opportunities?geography=FOREIGN&workplace=REMOTE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "opportunities"],
+              "query": [
+                {
+                  "key": "geography",
+                  "value": "FOREIGN"
+                },
+                {
+                  "key": "workplace",
+                  "value": "REMOTE"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ingestion & Sync",
+      "item": [
+        {
+          "name": "Sync Active Sources (Delta & Change Detection)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ingestion/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ingestion", "sync"]
+            },
+            "description": "Polls all active ATS job sources, checks content hashes, emits discovered/updated/closed events, and returns detailed IngestionSummary."
+          }
+        },
+        {
+          "name": "Enrich Existing Jobs (Backfill)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ingestion/enrich-existing",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ingestion", "enrich-existing"]
+            },
+            "description": "Re-runs location normalization, employment normalization, role classification, and skill extraction on all persisted jobs."
+          }
+        },
+        {
+          "name": "Legacy Scan",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ingestion/scan",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "ingestion", "scan"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Role Classification",
+      "item": [
+        {
+          "name": "Classify All Jobs",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/role-classifications/classify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "role-classifications", "classify"]
+            },
+            "description": "Classifies all jobs. Only known classifications increment the returned count; UNKNOWN jobs delete existing classification rows."
+          }
+        },
+        {
+          "name": "Get Classification for Job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/role-classifications/jobs/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "role-classifications", "jobs", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Skills & Profile",
+      "item": [
+        {
+          "name": "Get Skills for Job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/skills/jobs/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "skills", "jobs", "1"]
+            }
+          }
+        },
+        {
+          "name": "Get Profile Preference Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile/preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "profile", "preferences"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Live Streaming (SSE)",
+      "item": [
+        {
+          "name": "Stream Real-Time Job Events (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/stream",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jobs", "stream"]
+            },
+            "description": "Server-Sent Events endpoint streaming real-time job-discovered, job-updated, and job-closed events."
+          }
+        }
+      ]
+    }
+  ]
+}

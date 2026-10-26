@@ -1,5 +1,6 @@
 package com.careerradar.api;
 
+import com.careerradar.ingestion.IngestionSummary;
 import com.careerradar.ingestion.JobIngestionService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +25,11 @@ public class IngestionController {
                 jobIngestionService.ingestAllActiveSources();
 
         return new ScanResponse(inserted);
+    }
+
+    @PostMapping("/sync")
+    public IngestionSummary sync() {
+        return jobIngestionService.ingestActiveSources();
     }
 
     @PostMapping("/enrich-existing")

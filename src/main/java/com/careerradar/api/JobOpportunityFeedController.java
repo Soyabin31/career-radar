@@ -41,7 +41,11 @@ public class JobOpportunityFeedController {
             @RequestParam(required = false)
             RoleFamily roleFamily,
             @RequestParam(required = false)
-            Integer postedWithinDays) {
+            Integer postedWithinDays,
+            @RequestParam(required = false)
+            String search,
+            @RequestParam(required = false)
+            String sortBy) {
 
         OpportunityFilter filter =
                 new OpportunityFilter(
@@ -51,7 +55,9 @@ public class JobOpportunityFeedController {
                         workplace,
                         employment,
                         roleFamily,
-                        postedWithinDays
+                        postedWithinDays,
+                        search,
+                        sortBy
                 );
 
         List<JobOpportunityResult> results =

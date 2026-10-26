@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Career Radar - Direct-to-Source Job Stream</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+              950: '#1e1b4b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- App Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-brand-500/20">
+          <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-lg tracking-tight text-white">Career Radar</span>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">v2.0</span>
+          </div>
+          <p class="text-xs text-slate-400">Direct-to-Source Job Intelligence</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <!-- Live SSE Status Pill -->
+        <div id="sseStatusPill" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium" title="Real-time Server-Sent Events stream connected">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="sseStatusText">Radar Stream Active</span>
+        </div>
+
+        <!-- Sync Button -->
+        <button id="btnSync" onclick="triggerSync()" 
+          title="Fetches latest job openings directly from all 23 company ATS boards (Greenhouse, Lever, SmartRecruiters, Workable, Ashby)"
+          class="flex items-center space-x-2 px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium transition shadow-sm active:scale-95">
+          <svg id="syncIcon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <span>Sync Sources</span>
+        </button>
+
+        <!-- Enrich Button -->
+        <button id="btnEnrich" onclick="triggerEnrich()" 
+          title="Runs rule classification, location normalization & tech skill extraction across all stored jobs to compute match scores"
+          class="flex items-center space-x-2 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition active:scale-95">
+          <svg class="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+          </svg>
+          <span>Enrich Jobs</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+    <!-- Metrics Banner -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Active Jobs</p>
+        <div class="flex items-baseline space-x-2 mt-2">
+          <span id="metricTotalJobs" class="text-2xl font-bold text-white">—</span>
+          <span class="text-xs text-slate-500">monitored</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Target Role Matches</p>
+        <div class="flex items-baseline space-x-2 mt-2">
+          <span id="metricJavaJobs" class="text-2xl font-bold text-emerald-400">—</span>
+          <span class="text-xs text-slate-500">profile aligned</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Top Match Score</p>
+        <div class="flex items-baseline space-x-2 mt-2">
+          <span id="metricTopScore" class="text-2xl font-bold text-brand-400">—</span>
+          <span class="text-xs text-slate-500">weighted fit</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
+        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Last Feed Refresh</p>
+        <div class="flex items-baseline space-x-2 mt-2">
+          <span id="metricLastRefreshed" class="text-sm font-semibold text-slate-300">Just now</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter & Search Controls -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
+        <!-- Search Input -->
+        <div class="lg:col-span-3 relative">
+          <input type="text" id="searchInput" placeholder="Search company, title, skill, location..."
+            oninput="debouncedFetchFeed(300)"
+            class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+        </div>
+
+        <!-- Role Family Filter -->
+        <div class="lg:col-span-2">
+          <select id="roleFamilySelect" onchange="fetchFeed()"
+            class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-brand-500 transition">
+            <option value="" selected>All Target Roles</option>
+            <option value="JAVA_BACKEND">Java Backend</option>
+            <option value="BACKEND_ENGINEER">Backend Engineer / SDE</option>
+            <option value="JAVA_PLATFORM">Java Platform</option>
+            <option value="SOFTWARE_ENGINEER">Software Engineer / SE</option>
+            <option value="UNKNOWN">Unclassified (UNKNOWN)</option>
+          </select>
+        </div>
+
+        <!-- Freshness Filter -->
+        <div class="lg:col-span-2">
+          <select id="freshnessSelect" onchange="onFreshnessSelectChange()"
+            class="w-full bg-slate-950 border border-emerald-900/60 rounded-lg px-3 py-2 text-sm text-emerald-300 focus:outline-none focus:border-emerald-500 transition font-medium">
+            <option value="1">⚡ Last 24 Hours (First to Apply)</option>
+            <option value="2">🔥 Last 48 Hours (2 Days)</option>
+            <option value="7">📅 Past 7 Days (1 Week)</option>
+            <option value="14">Past 14 Days (2 Weeks)</option>
+            <option value="21" selected>Active Openings (≤ 3 Weeks)</option>
+            <option value="0">All Time (Include Older)</option>
+          </select>
+        </div>
+
+        <!-- Geography Filter -->
+        <div class="lg:col-span-2">
+          <select id="geographySelect" onchange="fetchFeed()"
+            class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-brand-500 transition">
+            <option value="">All Locations</option>
+            <option value="INDIA">🇮🇳 India (Domestic & WFH)</option>
+            <option value="FOREIGN">🌐 International / Foreign</option>
+          </select>
+        </div>
+
+        <!-- Workplace Filter -->
+        <div class="lg:col-span-1">
+          <select id="workplaceSelect" onchange="fetchFeed()"
+            class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-sm text-slate-300 focus:outline-none focus:border-brand-500 transition">
+            <option value="">All Places</option>
+            <option value="REMOTE">💻 Remote</option>
+            <option value="HYBRID">🏢 Hybrid</option>
+            <option value="ONSITE">📍 Onsite</option>
+          </select>
+        </div>
+
+        <!-- Min Score Slider -->
+        <div class="lg:col-span-2 flex items-center space-x-2 px-1">
+          <label class="text-xs text-slate-400 whitespace-nowrap">Min: <span id="minScoreLabel" class="text-brand-300 font-semibold">0%</span></label>
+          <input type="range" id="minScoreRange" min="0" max="100" value="0" step="5"
+            oninput="updateMinScore(this.value)"
+            class="w-full accent-brand-500 cursor-pointer">
+        </div>
+      </div>
+
+      <!-- Freshness Quick Radar Bar -->
+      <div class="flex items-center space-x-2 pt-2.5 border-t border-slate-800/80 overflow-x-auto text-xs">
+        <span class="text-emerald-400 font-semibold shrink-0 flex items-center space-x-1">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          <span>ATS Freshness Edge:</span>
+        </span>
+        <button type="button" onclick="setFreshness(1)" id="pillFresh1" class="freshness-pill px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0 font-medium active:scale-95 flex items-center space-x-1.5">
+          <span>⚡ Last 24h</span>
+          <span class="text-[10px] bg-emerald-950/90 text-emerald-300 px-1.5 py-0.2 rounded-full border border-emerald-700/60 font-semibold">First to Apply</span>
+        </button>
+        <button type="button" onclick="setFreshness(2)" id="pillFresh2" class="freshness-pill px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0 font-medium active:scale-95 flex items-center space-x-1">
+          <span>🔥 Last 48h</span>
+        </button>
+        <button type="button" onclick="setFreshness(7)" id="pillFresh7" class="freshness-pill px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0 font-medium active:scale-95 flex items-center space-x-1">
+          <span>📅 Past 7 Days</span>
+        </button>
+        <button type="button" onclick="setFreshness(21)" id="pillFresh21" class="freshness-pill px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition shrink-0 font-semibold active:scale-95 flex items-center space-x-1 shadow-sm">
+          <span>Active (≤ 3 Weeks)</span>
+        </button>
+        <button type="button" onclick="setFreshness(0)" id="pillFresh0" class="freshness-pill px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition shrink-0 active:scale-95">
+          All Time (Older)
+        </button>
+      </div>
+
+      <!-- Quick Filter Presets -->
+      <div class="flex items-center space-x-2 pt-2 border-t border-slate-800/60 overflow-x-auto text-xs">
+        <span class="text-slate-500 shrink-0 font-medium">Quick Presets:</span>
+        <button type="button" onclick="setPreset('INDIA_ALL')" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition shrink-0 active:scale-95">
+          🇮🇳 India (All Tech Hubs)
+        </button>
+        <button type="button" onclick="setPreset('INDIA_REMOTE')" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition shrink-0 active:scale-95">
+          🇮🇳 India Remote / WFH
+        </button>
+        <button type="button" onclick="setPreset('GLOBAL_REMOTE')" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition shrink-0 active:scale-95">
+          🌐 Global Remote (USD/EUR Contracts)
+        </button>
+        <button type="button" onclick="setPreset('JAVA_TOP')" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition shrink-0 active:scale-95">
+          ☕ Top Java / SDE (70%+ Fit)
+        </button>
+        <button type="button" onclick="setPreset('ALL_ROLES')" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition shrink-0 active:scale-95">
+          🏢 All Roles & Companies
+        </button>
+      </div>
+    </div>
+
+    <!-- Feed Header -->
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold text-white flex items-center space-x-2">
+        <span>Opportunity Radar Stream</span>
+        <span id="filteredCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 font-normal">0 results</span>
+      </h2>
+      <div class="flex items-center space-x-2 text-xs text-slate-400">
+        <span>Sort:</span>
+        <select id="sortBySelect" onchange="fetchFeed()" class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-brand-500 font-medium">
+          <option value="score_desc" selected>Fit Score &darr; &bull; Freshness &darr;</option>
+          <option value="fresh_desc">Freshest First 🕒 &darr; &bull; Fit Score &darr;</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Opportunities Container -->
+    <div id="opportunitiesContainer" class="space-y-3">
+      <!-- Loading Skeleton -->
+      <div class="animate-pulse bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+        <div class="h-4 bg-slate-800 rounded w-1/4"></div>
+        <div class="h-6 bg-slate-800 rounded w-3/4"></div>
+        <div class="h-4 bg-slate-800 rounded w-1/2"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 space-y-2 z-50"></div>
+
+  <script>
+    let allOpportunities = [];
+    let currentMinScore = 0;
+    let isFetching = false;
+    let fetchTimer = null;
+
+    function debouncedFetchFeed(delay = 300) {
+      clearTimeout(fetchTimer);
+      fetchTimer = setTimeout(fetchFeed, delay);
+    }
+
+    async function fetchFeed() {
+      if (isFetching) return;
+      isFetching = true;
+
+      const roleFamily = document.getElementById('roleFamilySelect').value;
+      const workplace = document.getElementById('workplaceSelect').value;
+      const geography = document.getElementById('geographySelect').value;
+      const search = document.getElementById('searchInput').value.trim();
+      const freshness = document.getElementById('freshnessSelect') ? document.getElementById('freshnessSelect').value : '21';
+      const sortBy = document.getElementById('sortBySelect') ? document.getElementById('sortBySelect').value : 'score_desc';
+
+      const params = new URLSearchParams();
+      if (roleFamily) params.append('roleFamily', roleFamily);
+      if (workplace) params.append('workplace', workplace);
+      if (geography) params.append('geography', geography);
+      if (currentMinScore > 0) params.append('minScore', currentMinScore);
+      if (search) params.append('search', search);
+      if (freshness && Number(freshness) > 0) params.append('postedWithinDays', freshness);
+      if (sortBy) params.append('sortBy', sortBy === 'fresh_desc' ? 'freshness' : 'score');
+
+      try {
+        const res = await fetch('/api/opportunities?' + params.toString());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        allOpportunities = data.opportunities || [];
+        updateMetrics(allOpportunities);
+        renderOpportunities(allOpportunities, search);
+      } catch (err) {
+        showToast('Error loading opportunities', 'error');
+      } finally {
+        isFetching = false;
+      }
+    }
+
+    function setFreshness(days) {
+      const select = document.getElementById('freshnessSelect');
+      if (select) select.value = days;
+      syncFreshnessPills(days);
+      fetchFeed();
+    }
+
+    function onFreshnessSelectChange() {
+      const select = document.getElementById('freshnessSelect');
+      const days = select ? select.value : 0;
+      syncFreshnessPills(days);
+      fetchFeed();
+    }
+
+    function syncFreshnessPills(days) {
+      const allPills = [0, 1, 2, 7, 21];
+      allPills.forEach(d => {
+        const el = document.getElementById(`pillFresh${d}`);
+        if (!el) return;
+        if (Number(d) === Number(days)) {
+          el.className = 'freshness-pill px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition shrink-0 font-semibold active:scale-95 flex items-center space-x-1.5 shadow-sm';
+        } else {
+          el.className = 'freshness-pill px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition shrink-0 active:scale-95 flex items-center space-x-1';
+        }
+      });
+    }
+
+    function searchEverywhere(term) {
+      document.getElementById('roleFamilySelect').value = '';
+      document.getElementById('geographySelect').value = '';
+      document.getElementById('workplaceSelect').value = '';
+      if (document.getElementById('freshnessSelect')) {
+        document.getElementById('freshnessSelect').value = '0';
+        syncFreshnessPills(0);
+      }
+      document.getElementById('minScoreRange').value = 0;
+      currentMinScore = 0;
+      document.getElementById('minScoreLabel').innerText = '0%';
+      document.getElementById('searchInput').value = term;
+      fetchFeed();
+    }
+
+    function setPreset(preset) {
+      const roleSelect = document.getElementById('roleFamilySelect');
+      const geoSelect = document.getElementById('geographySelect');
+      const workSelect = document.getElementById('workplaceSelect');
+      const range = document.getElementById('minScoreRange');
+
+      if (preset === 'INDIA_ALL') {
+        roleSelect.value = '';
+        geoSelect.value = 'INDIA';
+        workSelect.value = '';
+        currentMinScore = 0;
+      } else if (preset === 'INDIA_REMOTE') {
+        roleSelect.value = '';
+        geoSelect.value = 'INDIA';
+        workSelect.value = 'REMOTE';
+        currentMinScore = 0;
+      } else if (preset === 'GLOBAL_REMOTE') {
+        roleSelect.value = '';
+        geoSelect.value = 'FOREIGN';
+        workSelect.value = 'REMOTE';
+        currentMinScore = 0;
+      } else if (preset === 'JAVA_TOP') {
+        roleSelect.value = '';
+        geoSelect.value = '';
+        workSelect.value = '';
+        currentMinScore = 70;
+      } else if (preset === 'ALL_ROLES') {
+        roleSelect.value = '';
+        geoSelect.value = '';
+        workSelect.value = '';
+        currentMinScore = 0;
+      }
+      range.value = currentMinScore;
+      document.getElementById('minScoreLabel').innerText = currentMinScore + '%';
+      fetchFeed();
+    }
+
+    function updateMinScore(val) {
+      currentMinScore = val;
+      document.getElementById('minScoreLabel').innerText = val + '%';
+      debouncedFetchFeed(200);
+    }
+
+    function updateMetrics(jobs) {
+      document.getElementById('metricTotalJobs').innerText = jobs.length;
+      
+      const alignedJobs = jobs.filter(j => 
+        j.roleFamily === 'JAVA_BACKEND' || 
+        j.roleFamily === 'BACKEND_ENGINEER' || 
+        j.roleFamily === 'SOFTWARE_ENGINEER' || 
+        j.roleFamily === 'JAVA_PLATFORM'
+      );
+      document.getElementById('metricJavaJobs').innerText = alignedJobs.length;
+
+      let maxScore = 0;
+      jobs.forEach(j => {
+        const score = Number(j.matchScore ?? j.match?.score ?? 0);
+        if (score > maxScore) maxScore = score;
+      });
+      document.getElementById('metricTopScore').innerText = Math.round(maxScore) + '%';
+      document.getElementById('metricLastRefreshed').innerText = new Date().toLocaleTimeString();
+    }
+
+    function getFreshnessUrgencyBadge(postedAt, discoveredAt) {
+      const dateStr = postedAt || discoveredAt;
+      if (!dateStr) return '';
+      
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = Math.max(0, now - date);
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+
+      if (diffHours < 24) {
+        return `<span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 font-bold flex items-center space-x-1 shadow-sm" title="Posted within the last 24 hours directly on ATS! Apply immediately for maximum callback rate.">
+          <span class="animate-pulse text-emerald-400">⚡</span>
+          <span>&lt;24h Just In</span>
+        </span>`;
+      } else if (diffHours < 48) {
+        return `<span class="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold flex items-center space-x-1" title="Posted within the last 48 hours on ATS. High response probability.">
+          <span>🔥</span>
+          <span>&lt;48h Hot</span>
+        </span>`;
+      } else if (diffHours < 168) {
+        return `<span class="text-xs px-2.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30 font-medium flex items-center space-x-1" title="Posted within the past week.">
+          <span>✨</span>
+          <span>&lt;7d Fresh</span>
+        </span>`;
+      } else if (diffHours > 504) {
+        return `<span class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-500 border border-slate-700 font-normal" title="Opening is older than 3 weeks.">
+          <span>⏳</span>
+          <span>&gt;3w Stale</span>
+        </span>`;
+      }
+      return '';
+    }
+
+    function formatFreshness(postedAt, discoveredAt) {
+      const dateStr = postedAt || discoveredAt;
+      if (!dateStr) return '<span class="inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-medium">🕒 Recently Discovered</span>';
+      
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = Math.max(0, now - date);
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+
+      let relativeText = '';
+      if (diffHours < 1) {
+        relativeText = 'Just now';
+      } else if (diffHours < 24) {
+        relativeText = `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+      } else if (diffDays === 1) {
+        relativeText = '1 day ago';
+      } else if (diffDays < 30) {
+        relativeText = `${diffDays} days ago`;
+      } else {
+        const months = Math.floor(diffDays / 30);
+        relativeText = `${months} month${months === 1 ? '' : 's'} ago`;
+      }
+
+      const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const isPosted = !!postedAt;
+      const icon = isPosted ? '📅' : '🕒';
+      const prefix = isPosted ? 'Posted' : 'Discovered';
+      const badgeStyle = isPosted 
+        ? 'bg-emerald-950/40 text-emerald-300/90 border-emerald-800/40' 
+        : 'bg-slate-800/60 text-slate-300 border-slate-700/50';
+
+      return `<span class="inline-flex items-center space-x-1.5 text-xs px-2 py-0.5 rounded border ${badgeStyle} font-medium" title="${prefix} on ${formattedDate} (${relativeText})">
+        <span>${icon}</span>
+        <span>${prefix} ${relativeText}</span>
+        <span class="text-slate-500">&bull;</span>
+        <span class="text-slate-400">${formattedDate}</span>
+      </span>`;
+    }
+
+    function renderOpportunities(jobs, currentSearch = '') {
+      const container = document.getElementById('opportunitiesContainer');
+      document.getElementById('filteredCountBadge').innerText = jobs.length + ' results';
+
+      if (jobs.length === 0) {
+        container.innerHTML = `
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
+            <svg class="w-12 h-12 text-slate-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <h3 class="text-base font-medium text-slate-300">No opportunities match current filters</h3>
+            <p class="text-sm text-slate-500 mt-1">${currentSearch ? `No matches found for "${currentSearch}" under current role/score filter.` : 'Try resetting the role filter or adjusting the freshness/score slider.'}</p>
+            <div class="mt-4 flex justify-center space-x-3">
+              ${currentSearch ? `
+                <button onclick="searchEverywhere('${currentSearch}')" class="px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium transition shadow-sm">
+                  Search across ALL companies & locations for "${currentSearch}"
+                </button>
+              ` : `
+                <button onclick="setFreshness(0)" class="px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium transition shadow-sm">
+                  Include Older Postings (All Time)
+                </button>
+                <button onclick="setPreset('ALL_ROLES')" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition">
+                  Show All Roles
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = jobs.map(job => {
+        const score = Math.round(Number(job.matchScore ?? job.match?.score ?? 0));
+        let scoreBadge = '';
+        if (score >= 80) {
+          scoreBadge = `<span class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold">${score}% FIT</span>`;
+        } else if (score >= 50) {
+          scoreBadge = `<span class="px-2.5 py-1 rounded-lg bg-brand-500/20 text-brand-300 border border-brand-500/30 text-xs font-bold">${score}% FIT</span>`;
+        } else {
+          scoreBadge = `<span class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 text-xs font-medium">${score}% FIT</span>`;
+        }
+
+        const freshnessUrgencyBadge = getFreshnessUrgencyBadge(job.postedAt, job.discoveredAt);
+
+        const roleBadge = job.roleFamily === 'UNKNOWN' 
+          ? `<span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700" title="Non-technical or unmapped role family">Unclassified</span>`
+          : `<span class="text-xs px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-medium">${job.roleFamily}</span>`;
+
+        let eligBadge = '';
+        const eligStatus = job.eligibilityStatus || job.eligibility?.status || 'MAYBE';
+        if (eligStatus === 'REGION_OK' || eligStatus === 'GLOBAL') {
+          eligBadge = `<span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium" title="Location matches candidate profile preference">Eligible</span>`;
+        } else if (eligStatus === 'MAYBE') {
+          eligBadge = `<span class="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium" title="Remote or flexible terms mentioned. Verify specific country/timezone constraints before applying.">Verify Location</span>`;
+        } else {
+          eligBadge = `<span class="text-xs px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium" title="Onsite or hybrid in foreign country without remote option">Ineligible</span>`;
+        }
+
+        const isIndia = (job.geographyType === 'INDIA') || 
+                        (job.country && job.country.toLowerCase() === 'india') || 
+                        (job.location && /india|bengaluru|bangalore|pune|hyderabad|gurgaon|gurugram|noida|delhi|mumbai|chennai|kolkata|bhubaneswar|odisha/i.test(job.location));
+        const indiaBadge = isIndia 
+          ? `<span class="text-xs px-2 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 font-semibold flex items-center space-x-1"><span>🇮🇳</span><span>India</span></span>`
+          : '';
+
+        const isGlobalRemote = (job.workplaceType === 'REMOTE' && !isIndia);
+        const globalRemoteBadge = isGlobalRemote
+          ? `<span class="text-xs px-2 py-0.5 rounded bg-cyan-950/70 text-cyan-300 border border-cyan-700/60 font-semibold flex items-center space-x-1"><span>🌐</span><span>Global Remote</span></span>`
+          : '';
+
+        const matchedList = (job.match?.matchedSkills || job.matchedSkills || []);
+        const missingList = (job.match?.missingSkills || job.missingSkills || []);
+
+        let skillsHtml = '';
+        if (matchedList.length > 0 || missingList.length > 0) {
+          skillsHtml = `
+            <div class="pt-2 border-t border-slate-800/60 mt-2 space-y-1.5 text-xs">
+              <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                <span class="text-emerald-400 font-semibold flex items-center space-x-1">
+                  <span>✓ Matched (${matchedList.length}):</span>
+                </span>
+                ${matchedList.length > 0 
+                  ? matchedList.map(s => `<span class="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-medium">${s}</span>`).join(' ') 
+                  : '<span class="text-slate-500 italic">None</span>'}
+              </div>
+              ${missingList.length > 0 ? `
+                <div class="flex items-center space-x-2 flex-wrap gap-y-1 text-slate-400">
+                  <span class="text-amber-400/90 font-medium flex items-center space-x-1">
+                    <span>⚡ Missing / Unprofiled (${missingList.length}):</span>
+                  </span>
+                  ${missingList.map(s => `<span class="px-2 py-0.5 rounded bg-slate-950 text-slate-400 border border-slate-800 font-normal">${s}</span>`).join(' ')}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }
+
+        const freshness = formatFreshness(job.postedAt, job.discoveredAt);
+
+        return `
+          <div class="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-5 transition shadow-sm hover:shadow-md">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div class="space-y-1.5 flex-1">
+                <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                  ${scoreBadge}
+                  ${freshnessUrgencyBadge}
+                  ${roleBadge}
+                  ${eligBadge}
+                  ${indiaBadge}
+                  ${globalRemoteBadge}
+                  ${job.workplaceType ? `<span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">${job.workplaceType}</span>` : ''}
+                  ${job.employmentType ? `<span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">${job.employmentType}</span>` : ''}
+                </div>
+
+                <h3 class="text-base font-semibold text-white tracking-tight">
+                  <a href="${job.canonicalUrl}" target="_blank" class="hover:text-brand-400 transition">${job.title}</a>
+                </h3>
+
+                <div class="flex items-center space-x-3 text-xs text-slate-400 flex-wrap gap-y-1">
+                  <span class="font-medium text-slate-300">${job.companyName || 'Direct ATS'}</span>
+                  <span>&bull;</span>
+                  <span>${job.location || 'Location Unspecified'}</span>
+                  <span>&bull;</span>
+                  ${freshness}
+                </div>
+
+                ${skillsHtml}
+              </div>
+
+              <div class="sm:self-center shrink-0">
+                <a href="${job.canonicalUrl}" target="_blank" class="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-brand-600 text-slate-200 hover:text-white text-xs font-medium border border-slate-700 hover:border-brand-500 transition active:scale-95 shadow-sm">
+                  <span>Apply on ATS</span>
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                  </svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function triggerSync() {
+      const btn = document.getElementById('btnSync');
+      const icon = document.getElementById('syncIcon');
+      btn.disabled = true;
+      icon.classList.add('animate-spin');
+
+      try {
+        const res = await fetch('/api/ingestion/sync', { method: 'POST' });
+        const summary = await res.json();
+        showToast(`Sync complete! Discovered: ${summary.totalDiscovered}, Updated: ${summary.totalUpdated}, Closed: ${summary.totalClosed}`, 'success');
+        fetchFeed();
+      } catch (err) {
+        showToast('Sync request failed', 'error');
+      } finally {
+        btn.disabled = false;
+        icon.classList.remove('animate-spin');
+      }
+    }
+
+    async function triggerEnrich() {
+      const btn = document.getElementById('btnEnrich');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/ingestion/enrich-existing', { method: 'POST' });
+        const data = await res.json();
+        showToast(`Enrichment complete! Updated ${data.updated} jobs.`, 'success');
+        fetchFeed();
+      } catch (err) {
+        showToast('Enrichment failed', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    let discoveryBatchCount = 0;
+    let discoveryToastTimer = null;
+
+    function initSSE() {
+      const evtSource = new EventSource('/api/jobs/stream');
+      const pill = document.getElementById('sseStatusPill');
+      const text = document.getElementById('sseStatusText');
+
+      evtSource.addEventListener('connected', (e) => {
+        text.innerText = 'Radar Stream Live';
+      });
+
+      evtSource.addEventListener('job-discovered', (e) => {
+        discoveryBatchCount++;
+        clearTimeout(discoveryToastTimer);
+        discoveryToastTimer = setTimeout(() => {
+          if (discoveryBatchCount === 1) {
+            try {
+              const job = JSON.parse(e.data);
+              showToast(`New Job: ${job.title} at ${job.companyName}`, 'info');
+            } catch (_) {}
+          } else {
+            showToast(`⚡ Radar stream: Discovered ${discoveryBatchCount} new job opportunities!`, 'success');
+          }
+          discoveryBatchCount = 0;
+          debouncedFetchFeed(300);
+        }, 500);
+      });
+
+      evtSource.addEventListener('job-updated', (e) => {
+        try {
+          const job = JSON.parse(e.data);
+          showToast(`Updated: ${job.title}`, 'info');
+        } catch (_) {}
+        debouncedFetchFeed(500);
+      });
+
+      evtSource.addEventListener('job-closed', (e) => {
+        try {
+          const job = JSON.parse(e.data);
+          showToast(`Closed: ${job.title}`, 'info');
+        } catch (_) {}
+        debouncedFetchFeed(500);
+      });
+
+      evtSource.onerror = () => {
+        text.innerText = 'Stream Reconnecting...';
+        pill.className = 'flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-medium';
+      };
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      while (container.children.length >= 3) {
+        container.firstElementChild.remove();
+      }
+
+      const toast = document.createElement('div');
+      
+      let border = 'border-slate-700 bg-slate-900 text-slate-200';
+      if (type === 'success') border = 'border-emerald-500/40 bg-slate-900 text-emerald-300';
+      if (type === 'error') border = 'border-rose-500/40 bg-slate-900 text-rose-300';
+
+      toast.className = `px-4 py-3 rounded-xl border shadow-xl text-xs font-medium max-w-sm transition transform duration-300 translate-y-2 opacity-0 ${border}`;
+      toast.innerText = message;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchFeed();
+      initSSE();
+    });
+  </script>
+</body>
+</html>

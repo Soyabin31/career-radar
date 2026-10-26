@@ -13,11 +13,38 @@ public record OpportunityFilter(
         WorkplaceType workplaceType,
         EmploymentType employmentType,
         RoleFamily roleFamily,
-        Integer postedWithinDays
+        Integer postedWithinDays,
+        String search,
+        String sortBy
 ) {
+
+    public OpportunityFilter(
+            Double minScore,
+            EligibilityStatus eligibilityStatus,
+            GeographyType geographyType,
+            WorkplaceType workplaceType,
+            EmploymentType employmentType,
+            RoleFamily roleFamily,
+            Integer postedWithinDays,
+            String search) {
+        this(minScore, eligibilityStatus, geographyType, workplaceType, employmentType, roleFamily, postedWithinDays, search, null);
+    }
+
+    public OpportunityFilter(
+            Double minScore,
+            EligibilityStatus eligibilityStatus,
+            GeographyType geographyType,
+            WorkplaceType workplaceType,
+            EmploymentType employmentType,
+            RoleFamily roleFamily,
+            Integer postedWithinDays) {
+        this(minScore, eligibilityStatus, geographyType, workplaceType, employmentType, roleFamily, postedWithinDays, null, null);
+    }
 
     public static OpportunityFilter empty() {
         return new OpportunityFilter(
+                null,
+                null,
                 null,
                 null,
                 null,

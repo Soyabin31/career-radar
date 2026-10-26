@@ -3,117 +3,134 @@ package com.careerradar.matching;
 import com.careerradar.job.Job;
 import com.careerradar.job.JobRepository;
 import com.careerradar.job.domain.RoleFamily;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class RoleClassificationServiceTest {
 
-    @Test
-    void shouldClassifyAndPersistJavaBackendJob() {
+    @Mock
+    private JobRepository jobRepository;
 
-        JobRepository jobRepository =
-                mock(JobRepository.class);
+    @Mock
+    private JobRoleClassificationRepository
+            jobRoleClassificationRepository;
 
-        JobRoleClassificationRepository classificationRepository =
-                mock(JobRoleClassificationRepository.class);
+    @Mock
+    private RoleClassifier roleClassifier;
 
-        RoleClassifier roleClassifier =
-                mock(RoleClassifier.class);
+    @Mock
+    private Job job;
 
-        Job job = mock(Job.class);
+    @Mock
+    private JobRoleClassification existingClassification;
 
-        when(job.getId()).thenReturn(1L);
-        when(job.getTitle())
-                .thenReturn("Senior Java Backend Engineer");
-        when(job.getDescription())
-                .thenReturn("Spring Boot backend services.");
+    private RoleClassificationService service;
 
-        when(jobRepository.findAll())
-                .thenReturn(List.of(job));
+    @BeforeEach
+    void setUp() {
 
-        when(roleClassifier.classify(
-                job.getTitle(),
-                job.getDescription()
-        )).thenReturn(
-                new RoleClassificationResult(
-                        RoleFamily.JAVA_BACKEND,
-                        0.95
-                )
-        );
-
-        when(classificationRepository
-                .findByJobIdAndRoleFamily(
-                        1L,
-                        RoleFamily.JAVA_BACKEND
-                ))
-                .thenReturn(java.util.Optional.empty());
-
-        RoleClassificationService service =
+        service =
                 new RoleClassificationService(
                         jobRepository,
-                        classificationRepository,
+                        jobRoleClassificationRepository,
                         roleClassifier
                 );
-
-        int classified =
-                service.classifyAllJobs();
-
-        assertEquals(1, classified);
-
-        verify(classificationRepository)
-                .save(any(JobRoleClassification.class));
     }
 
     @Test
     void shouldNotPersistUnknownRole() {
 
-        JobRepository jobRepository =
-                mock(JobRepository.class);
+        when(job.getId())
+                .thenReturn(1L);
 
-        JobRoleClassificationRepository classificationRepository =
-                mock(JobRoleClassificationRepository.class);
-
-        RoleClassifier roleClassifier =
-                mock(RoleClassifier.class);
-
-        Job job = mock(Job.class);
-
-        when(job.getId()).thenReturn(2L);
         when(job.getTitle())
-                .thenReturn("Senior Professional");
+                .thenReturn("Operations Lead");
+
         when(job.getDescription())
-                .thenReturn("Business stakeholder role.");
+                .thenReturn("Java and Kubernetes.");
 
-        when(jobRepository.findAll())
-                .thenReturn(List.of(job));
-
-        when(roleClassifier.classify(
-                job.getTitle(),
-                job.getDescription()
-        )).thenReturn(
+        RoleClassificationResult result =
                 new RoleClassificationResult(
                         RoleFamily.UNKNOWN,
                         0.0
-                )
-        );
-
-        RoleClassificationService service =
-                new RoleClassificationService(
-                        jobRepository,
-                        classificationRepository,
-                        roleClassifier
                 );
 
-        int classified =
-                service.classifyAllJobs();
+        when(roleClassifier.classify(
+                "Operations Lead",
+                "Java and Kubernetes."
+        )).thenReturn(result);
 
-        assertEquals(0, classified);
+        when(jobRoleClassificationRepository
+                .findByJobIdOrderByConfidenceDesc(1L))
+                .thenReturn(List.of(existingClassification));
 
-        verify(classificationRepository, never())
+        RoleClassificationResult actual =
+                service.classifyAndPersist(job);
+
+        assertThat(actual.roleFamily())
+                .isEqualTo(RoleFamily.UNKNOWN);
+
+        verify(jobRoleClassificationRepository)
+                .deleteAll(List.of(existingClassification));
+
+        verify(jobRoleClassificationRepository, never())
+                .save(any(JobRoleClassification.class));
+    }
+
+    @Test
+    void shouldPersistMeaningfulRoleClassification() {
+
+        when(job.getId())
+                .thenReturn(1L);
+
+        when(job.getTitle())
+                .thenReturn("Senior Java Backend Engineer");
+
+        when(job.getDescription())
+                .thenReturn("Java and Spring Boot.");
+
+        RoleClassificationResult result =
+                new RoleClassificationResult(
+                        RoleFamily.JAVA_BACKEND,
+                        0.95
+                );
+
+        when(roleClassifier.classify(
+                "Senior Java Backend Engineer",
+                "Java and Spring Boot."
+        )).thenReturn(result);
+
+        when(jobRoleClassificationRepository
+                .findByJobIdOrderByConfidenceDesc(1L))
+                .thenReturn(List.of());
+
+        when(jobRoleClassificationRepository
+                .findByJobIdAndRoleFamily(
+                        1L,
+                        RoleFamily.JAVA_BACKEND
+                ))
+                .thenReturn(Optional.empty());
+
+        RoleClassificationResult actual =
+                service.classifyAndPersist(job);
+
+        assertThat(actual.roleFamily())
+                .isEqualTo(RoleFamily.JAVA_BACKEND);
+
+        verify(jobRoleClassificationRepository)
                 .save(any(JobRoleClassification.class));
     }
 }

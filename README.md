@@ -676,13 +676,204 @@ Eligibility is modeled separately from matching.
 Supported states include:
 
 ```text
-GLOBAL
-REGION_OK
-MAYBE
-NOT_ELIGIBLE
-UNKNOWN
+GLOBAL        - Worldwide remote contracts open to candidates in India or globally.
+REGION_OK     - Explicitly located in candidate's target domestic hubs (e.g., India / Bengaluru / Pune / Remote WFH).
+MAYBE         - Remote or flexible terms mentioned, but specific country, visa, or timezone restrictions require candidate verification.
+NOT_ELIGIBLE  - Onsite or hybrid role in a foreign region without remote work authorization.
+UNKNOWN       - Location or eligibility terms unspecified by the ATS listing.
 ```
 
-Foreign onsite opportunities are not automatically rejected.
+Foreign onsite opportunities are not automatically rejected if visa sponsorship or remote terms are explicitly mentioned.
 
-Work authorization
+---
+
+# Live Web Dashboard & Real-Time Radar
+
+Career Radar provides an embedded, lightweight Tailwind CSS & JavaScript dashboard directly served at `http://localhost:3107/`.
+
+Key UI capabilities:
+* **ATS Freshness Edge**: Quick-filter pills for `⚡ Last 24 Hours` *(First to Apply)*, `🔥 Last 48 Hours`, `📅 Past 7 Days`, and `Active (≤ 3 Weeks)` to eliminate stale jobs.
+* **Urgency & Freshness Badges**: Cards show relative posting time (e.g. `📅 Posted 2 days ago • Oct 24, 2026` or `🕒 Discovered 4 hours ago`) plus visual urgency chips (`⚡ <24h Just In`, `🔥 <48h Hot`, `✨ <7d Fresh`, `⏳ >3w Stale`).
+* **Explainable Skill Alignment**: Visual pills distinguishing **✓ Matched Skills** (green) from **⚡ Missing / Unprofiled Skills** (slate).
+* **Live Server-Sent Events (SSE)**: Real-time radar stream updates via `/api/jobs/stream`.
+* **Direct ATS Apply**: Bypasses LinkedIn and job-board aggregators with direct 1-click links to the company's official ATS board.
+
+---
+
+# Local Setup & Step-by-Step Installation Guide
+
+Follow this guide to get Career Radar running locally on your computer from scratch.
+
+## Prerequisites
+
+Before starting, ensure your local environment meets the following requirements:
+
+| Tool | Version Required | Purpose | Verification Command |
+| :--- | :--- | :--- | :--- |
+| **Java JDK** | **Java 23** (e.g., Amazon Corretto 23, Temurin 23) | Application Runtime & Language Level | `java -version` |
+| **Docker Desktop** | Latest (WSL2 backend on Windows) | Runs isolated PostgreSQL 17 database | `docker --version` |
+| **Apache Maven** | 3.9+ | Build & Dependency Management | `mvn -version` |
+| **Git** | 2.x+ | Version Control | `git --version` |
+| **IntelliJ IDEA** *(Optional)* | Community or Ultimate (2024.2+) | Recommended IDE | N/A |
+| **Postman** *(Optional)* | Latest | API testing & exploration | N/A |
+
+> **Port Allocation Notice**:
+> * **Application Port**: `3107` (configured in `application.yml` to avoid collision with standard port `8080`).
+> * **PostgreSQL Port**: `5433` (mapped from container `5432` to host `5433` in `docker-compose.yml` so it does not conflict with existing local or Docker PostgreSQL instances running on default `5432`).
+
+---
+
+## Step-by-Step Setup
+
+### Step 1: Clone the Repository
+
+Open your terminal or PowerShell and clone the project:
+
+```bash
+git clone https://github.com/your-username/career-radar.git
+cd career-radar
+```
+
+---
+
+### Step 2: Start the PostgreSQL Database via Docker
+
+Career Radar includes a pre-configured `docker-compose.yml` file that provisions PostgreSQL 17 on port `5433`.
+
+Make sure Docker Desktop is running, then execute:
+
+```bash
+docker compose up -d
+```
+
+Verify that the database container is healthy:
+
+```bash
+docker ps --filter "name=career-radar-postgres"
+```
+
+You should see:
+```text
+CONTAINER ID   IMAGE                  STATUS                   PORTS
+...            postgres:17-bookworm   Up (healthy)             0.0.0.0:5433->5432/tcp
+```
+
+> **Database Credentials**:
+> * **Host**: `localhost`
+> * **Port**: `5433`
+> * **Database**: `career_radar`
+> * **Username**: `career_radar`
+> * **Password**: `career_radar`
+
+---
+
+### Step 3: Run Database Migrations (Automated via Flyway)
+
+You do **not** need to run SQL migration scripts manually.
+When the Spring Boot application boots up, **Flyway** automatically executes all migrations (`V1` through `V12`) located in `src/main/resources/db/migration/`:
+* Creates tables: `companies`, `jobs`, `job_sources`, `skills`, `profiles`, `job_skills`, `job_role_classifications`.
+* Seeds default candidate profile preferences (Java Backend, SDE II, Spring Boot, Microservices).
+* Seeds 23 top tech company ATS sources (Greenhouse, SmartRecruiters, Workable, Lever, Ashby).
+* Automatically repairs checksum mismatches via `FlywayConfig.java`.
+
+---
+
+### Step 4: Build and Run the Application
+
+#### Option A: Running from IntelliJ IDEA (Recommended)
+
+1. Open **IntelliJ IDEA** and select **Open** -> choose the `career-radar` folder.
+2. Configure Project SDK:
+   * Go to **File** -> **Project Structure...** (`Ctrl + Alt + Shift + S`).
+   * Under **Project**, set **SDK** to **Amazon Corretto 23** or **Java 23**.
+   * Set **Language level** to **23 - Default**.
+   * Click **Apply** and **OK**.
+3. Open `src/main/java/com/careerradar/CareerRadarApplication.java`.
+4. Click the green **Run (▶)** icon next to `public class CareerRadarApplication` (or press `Shift + F10`).
+5. Wait for the console banner:
+   ```text
+   Tomcat started on port 3107 (http) with context path '/'
+   Started CareerRadarApplication in X.X seconds
+   ```
+
+#### Option B: Running from Terminal / Command Line
+
+```bash
+# Compile and run unit tests
+mvn clean test
+
+# Launch the application
+mvn spring-boot:run
+```
+
+---
+
+### Step 5: Access the Web Dashboard
+
+Open your web browser and navigate to:
+```text
+http://localhost:3107/
+```
+
+#### First-Time Usage Walkthrough:
+1. **Sync Sources**: Click the **Sync Sources** button in the header. The application will concurrently fetch live job postings directly from company ATS portals.
+2. **Enrich Jobs**: Click **Enrich Jobs**. This runs location normalization, role family classification, skill extraction, and candidate fit scoring.
+3. **Explore the Freshness Radar**:
+   * Click **`⚡ Last 24h`** to see positions posted today before they appear on LinkedIn.
+   * Click **`🔥 Last 48h`** to capture active early-applicant postings.
+   * Switch sorting to **`Freshest First 🕒 ↓`** to view newly opened listings in chronological order.
+4. **Search Directly**: Enter a company name (e.g. `Miratech`, `Moniepoint`, `Snowflake`) or skill (e.g. `Kafka`, `Docker`) into the search bar.
+5. **Apply on ATS**: Click **Apply on ATS** on any job card to navigate directly to the company's official job requisition.
+
+---
+
+### Step 6: Postman API Exploration
+
+A complete Postman collection is included in the project root:
+`career-radar.postman_collection.json`
+
+1. Open **Postman** -> Click **Import** -> Select `career-radar.postman_collection.json`.
+2. Explore key endpoints:
+   * `GET http://localhost:3107/api/opportunities?postedWithinDays=1` (24-hour fresh jobs)
+   * `GET http://localhost:3107/api/opportunities?roleFamily=JAVA_BACKEND&minScore=70` (Target Java roles)
+   * `POST http://localhost:3107/api/ingestion/sync` (Trigger batch ATS synchronization)
+   * `POST http://localhost:3107/api/ingestion/enrich` (Trigger AI/heuristic job classification)
+   * `GET http://localhost:3107/api/jobs/stream` (Connect to real-time SSE stream)
+
+---
+
+### Step 7: Running Tests
+
+To verify the complete test suite locally:
+
+```bash
+mvn test
+```
+
+All 69 unit and integration tests (covering ingestion, role classification, location normalization, skill scoring, and DTO serialization) should pass cleanly:
+```text
+[INFO] Results:
+[INFO] Tests run: 69, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+```
+
+---
+
+## Troubleshooting Common Issues
+
+* **Port 3107 already in use**:
+  Ensure an earlier application instance or test process is not occupying the port. In Windows PowerShell:
+  ```powershell
+  Get-NetTCPConnection -LocalPort 3107 -ErrorAction SilentlyContinue | Select-Object OwningProcess
+  Stop-Process -Id <PID> -Force
+  ```
+
+* **Database connection failed (`Connection refused`)**:
+  Verify that Docker Desktop is running and that the PostgreSQL container is active:
+  ```powershell
+  docker compose up -d
+  docker ps
+  ```
+
+* **Flyway Checksum Mismatch**:
+  Career Radar includes an auto-repairing `FlywayMigrationStrategy` bean in `FlywayConfig.java`. If a local checksum discrepancy occurs, simply re-run the application; it automatically calls `flyway.repair()` before migrating.
